@@ -110,7 +110,7 @@ camunda.create_group(id: 'recruiter', name: 'Recruiters', type: 'type')
 screeners = camunda.create_group(id: 'designer_screeners', name: 'Designer screeners', type: 'type')
 
 camunda.users.each { |user| camunda.delete_user(user) }
-eldar = camunda.create_user(id: 'eldar', first_name: 'Eldar', last_name: 'Yusupov', email: 'eldar@toptal.com', password: 'password')
+eldar = camunda.create_user(id: 'eldar', first_name: 'Eldar', last_name: 'Yusupov', email: 'eldar@example.com', password: 'password')
 
 camunda.create_group_member(screeners, eldar)
 
