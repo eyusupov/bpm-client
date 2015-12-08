@@ -36,27 +36,18 @@ trap('INT') do
 end
 
 SUBCOMMANDS = {
-  global: {
-    users: '(U)sers',
-    definitions: 'Process (d)efinitions',
-    instances: 'Process (i)nstances',
-    tasks: 'Active (t)asks'
-  },
-  definitions: {start: '(S)tart process instance'},
-  instances: {},
-  tasks: {},
-  users: {},
+  global: [:groups, :users, :process_definitions, :process_instances, :tasks]
 }
-
-GLOBAL_COMMANDS = {back: '(b)ack'}
+COMMON_SUBCOMMANDS = [:back]
 
 context = :global
 
 loop do
-  commands = SUBCOMMANDS[context].merge(GLOBAL_COMMANDS)
-  Readline.completion_proc = proc { |cmd| commands.keys.grep(/^#{Regexp.escape(cmd)}/) }
+  commands = SUBCOMMANDS[context] || []
+  commands.push(*COMMON_SUBCOMMANDS) unless context == :global
+  Readline.completion_proc = proc { |cmd| commands.grep(/^#{Regexp.escape(cmd)}/) }
   Readline.completion_append_character = ''
-  puts "#{commands.values.join('; ')}"
+  puts "#{commands.join('; ')}"
   cmd = Readline.readline("#{context}> ", true)
   break unless cmd
   cmd = cmd.to_sym
@@ -68,7 +59,8 @@ loop do
     else
       context = cmd
       # List entities
+      entities = camunda.send(cmd)
+      entities.each { |entity| puts entity }
     end
   end
-  puts cmd, "\n"
 end

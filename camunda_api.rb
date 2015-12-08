@@ -40,6 +40,10 @@ class Group
     connection.post("group/#{id}", id: id, name: name, type: type)
     self
   end
+
+  def to_s
+    "Group: id: #{id}, name: #{name}, type: #{type}"
+  end
 end
 
 class User
@@ -71,6 +75,10 @@ class User
   def add_to_group(group)
     connection.put("group/#{group.id}/members/#{id}")
   end
+
+  def to_s
+    puts "User: #{id}, first name: #{first_name}, last name: #{last_name}"
+  end
 end
 
 class Deployment
@@ -93,15 +101,23 @@ class Deployment
   def delete
     connection.delete("deployment/#{id}")
   end
+
+  def to_s
+    "Deployment: id: #{id}, name: #{name}"
+  end
 end
 
 class Execution
   include Connection
 
   attr_reader :id
-  attr_accessor :process_insance_id, :ended
+  attr_accessor :process_instance_id, :ended
 
   def initialize(id:, process_instance_id:, ended:)
+  end
+
+  def to_s
+    "Execution: id: #{id}, process_instance_id: #{process_instance_id}, ended: #{ended}"
   end
 end
 
@@ -126,6 +142,10 @@ class ProcessDefinition
   def start
     connection.post("process-definition/key/#{key}/start", {}).body
   end
+
+  def to_s
+    "ProcessDefinition: id: #{id}, key: #{key}, name: #{name}, suspended: #{suspended}"
+  end
 end
 
 class ProcessInstance
@@ -145,6 +165,14 @@ class ProcessInstance
   def delete
     connection.delete("process-instance/#{id}")
   end
+
+  def to_s
+    "ProcessInstance: id: #{id}, definition_id: #{definition_id}, business_key: #{business_key}, ended: #{ended},  suspended: #{suspended}"
+  end
+end
+
+class TaskDefinition
+  include Connection
 end
 
 class Task
@@ -185,6 +213,10 @@ class Task
 
   def claim(user)
     connection.post("task/#{id}/claim", userId: user['id'])
+  end
+
+  def to_s
+    "Task: id: #{id}, name: #{name}, assignee: #{assignee}, created: #{created},  due: #{due}, owner: #{owner}, definition: #{task_definition_key}"
   end
 end
 
