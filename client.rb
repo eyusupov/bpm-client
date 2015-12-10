@@ -12,22 +12,43 @@ require_relative 'camunda_api'
 
 camunda = Camunda.new
 
-camunda.groups.each(&:delete)
-Group.new(id: 'designers', name: 'Designers', type: 'type').create
-Group.new(id: 'recruiter', name: 'Recruiters', type: 'type').create
+groups = [{id: 'screeners', name: 'screeners', type: 'WORKFLOW'},
+          {id: 'applicants', name: 'applicants', type: 'WORKFLOW'}]
+group_ids = groups.map { |group| group[:id] }
 
-screeners = Group.new(id: 'designer_screeners', name: 'Designer screeners', type: 'type').create
+camunda.groups.select { |group| group_ids.include?(group.id) }.each(&:delete)
+admins_group = camunda.groups.detect { |group| group.id == 'camunda-admin' }
+screeners_group, applicants_group = groups.map { |group| Group.new(group).create }
 
-camunda.users.each(&:delete)
-eldar = User.new(id: 'eldar', first_name: 'Eldar', last_name: 'Yusupov', email: 'eldar@example.com', password: 'password').create
+users = [{id: 'applicant', first_name: 'Designer', last_name: 'Applicant', password: 'password'},
+         {id: 'screener1', first_name: 'Screener', last_name: 'One', password: 'password'},
+         {id: 'screener2', first_name: 'Screener', last_name: 'Two', password: 'password'},
+         {id: 'screener3', first_name: 'Screener', last_name: 'Three', password: 'password'}]
 
-eldar.add_to_group(screeners)
+user_ids = users.map { |user| user[:id] }
+camunda.users.select { |user| user_ids.include?(user.id) }.each(&:delete)
 
-camunda.process_instances.each(&:delete)
-camunda.deployments.each(&:delete)
+applicant, *screeners = users.map { |user| User.new(user).create }
+
+applicant.add_to_group(applicants_group)
+screeners.each { |screener| screener.add_to_group(screeners_group) }
+
+if admins_group
+  applicant.add_to_group(admins_group)
+  screeners.each { |screener| screener.add_to_group(admins_group) }
+end
+
+camunda.filters.each(&:delete)
+filters = [{resource_type: 'Task', name: 'My Tasks', owner: 'demo', query: {'assigneeExpression': '${currentUser()}'}},
+           {resource_type: 'Task', name: 'My Group Tasks', owner: 'demo', query: {'candidateGroupsExpression': '${currentUserGroups()}'}}]
+filters.map { |filter| Filter.new(filter).create }
+
+camunda.process_instances.select { |instance| instance.definition_id.start_with?('PortfolioReview:') }.each(&:delete)
+camunda.deployments.select { |deployment| deployment.name == 'process' }.each(&:delete)
 
 Deployment.new(name: 'process').create(file_name: 'diagram.bpmn')
-camunda.process_definitions.each(&:start)
+
+camunda.process_definitions.select { |definition| definition.id.start_with?('PortfolioReview:') }.each(&:start)
 
 stty_save = `stty -g`.chomp
 trap('INT') do
@@ -36,31 +57,32 @@ trap('INT') do
 end
 
 SUBCOMMANDS = {
-  global: [:groups, :users, :process_definitions, :process_instances, :tasks]
+  global: [:groups, :users, :process_definitions, :process_instances, :tasks, :deployments, :filters]
 }
 COMMON_SUBCOMMANDS = [:back]
 
 context = :global
+context_obj = camunda
 
 loop do
-  commands = SUBCOMMANDS[context] || []
-  commands.push(*COMMON_SUBCOMMANDS) unless context == :global
+  commands = (SUBCOMMANDS[context] || []) + COMMON_SUBCOMMANDS
   Readline.completion_proc = proc { |cmd| commands.grep(/^#{Regexp.escape(cmd)}/) }
   Readline.completion_append_character = ''
   puts "#{commands.join('; ')}"
   cmd = Readline.readline("#{context}> ", true)
   break unless cmd
-  cmd = cmd.to_sym
 
-  if commands.include?(cmd)
-    case cmd
-    when :back
-      context = :global
-    else
-      context = cmd
-      # List entities
-      entities = camunda.send(cmd)
-      entities.each { |entity| puts entity }
-    end
+  cmd = cmd.to_sym
+  next unless commands.include?(cmd)
+
+  case cmd
+  when :back
+    context = :global
+    context_obj = camunda
+  else
+    context = cmd
+    context_obj = context_obj.send(cmd)
+    # List entities
+    context_obj.each { |entity| puts entity }
   end
 end

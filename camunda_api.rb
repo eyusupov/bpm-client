@@ -1,5 +1,5 @@
 module Connection
-  BASE_URL = 'http://localhost:8080/bpm-sample/'.freeze
+  BASE_URL = 'http://localhost:8080/engine-rest/'.freeze
   DEBUG = false
 
   def connection
@@ -16,16 +16,58 @@ module Connection
   end
 end
 
-class Group
+class Resource
+  def initialize(options = {})
+    options.keys.each { |attr| instance_variable_set("@#{attr}", options[attr]) }
+  end
+
+  def parse_body(body)
+    attributes.each do |attr|
+      keys = attr.to_s.split('_')
+      key = keys.first.downcase + keys.drop(1).collect(&:capitalize).join
+      instance_variable_set("@#{attr}", body[key])
+    end
+    self
+  end
+
+  private
+
+  def self.attr_accessor(*vars)
+    @attributes ||= []
+    @attributes.concat vars
+    super(*vars)
+  end
+
+  def self.attr_reader(*vars)
+    @attributes ||= []
+    @attributes.concat vars
+    super(*vars)
+  end
+
+  def self.attr_writer(*vars)
+    @attributes ||= []
+    @attributes.concat vars
+    super(*vars)
+  end
+
+  def self.attributes # rubocop:disable Style/TrivialAccessors
+    @attributes
+  end
+
+  def attributes
+    self.class.attributes
+  end
+
+  def to_s
+    values = attributes.map { |attr| [attr, instance_variable_get("@#{attr}")].join(': ') }.join('; ')
+    "#{self.class} <#{values}>"
+  end
+end
+
+class Group < Resource
   include Connection
 
   attr_accessor :id, :name, :type
-
-  def initialize(id:, name:, type:)
-    @id = id
-    @name = name
-    @type = type
-  end
 
   def delete
     connection.delete("group/#{id}")
@@ -40,24 +82,13 @@ class Group
     connection.post("group/#{id}", id: id, name: name, type: type)
     self
   end
-
-  def to_s
-    "Group: id: #{id}, name: #{name}, type: #{type}"
-  end
 end
 
-class User
+class User < Resource
   include Connection
 
   attr_accessor :id, :first_name, :last_name, :email
-
-  def initialize(id:, first_name:, last_name:, email:, password: nil)
-    @id = id
-    @first_name = first_name
-    @last_name = last_name
-    @email = email
-    @password = password
-  end
+  attr_writer :password
 
   def delete
     connection.delete("user/#{id}")
@@ -74,23 +105,15 @@ class User
 
   def add_to_group(group)
     connection.put("group/#{group.id}/members/#{id}")
-  end
-
-  def to_s
-    puts "User: #{id}, first name: #{first_name}, last name: #{last_name}"
+    self
   end
 end
 
-class Deployment
+class Deployment < Resource
   include Connection
 
   attr_reader :id
   attr_accessor :name
-
-  def initialize(id: nil, name:)
-    @id = id
-    @name = name
-  end
 
   def create(file_name:)
     file = Faraday::UploadIO.new(file_name, 'text/xml')
@@ -101,81 +124,40 @@ class Deployment
   def delete
     connection.delete("deployment/#{id}")
   end
-
-  def to_s
-    "Deployment: id: #{id}, name: #{name}"
-  end
 end
 
-class Execution
+class Execution < Resource
   include Connection
 
   attr_reader :id
   attr_accessor :process_instance_id, :ended
-
-  def initialize(id:, process_instance_id:, ended:)
-  end
-
-  def to_s
-    "Execution: id: #{id}, process_instance_id: #{process_instance_id}, ended: #{ended}"
-  end
 end
 
-class ProcessDefinition
+class ProcessDefinition < Resource
   include Connection
 
   attr_reader :id, :key, :category, :description, :name, :version, :resource, :deployment_id, :diagram, :suspended
 
-  def initialize(id:, key:, category:, description:, name:, version:, resource:, deployment_id:, diagram:, suspended:)
-    @id = id
-    @key = key
-    @category = category
-    @description = description
-    @name = name
-    @version = version
-    @resource = resource
-    @deployment_id = deployment_id
-    @diagram = diagram
-    @suspended = suspended
-  end
-
   def start
     connection.post("process-definition/key/#{key}/start", {}).body
   end
-
-  def to_s
-    "ProcessDefinition: id: #{id}, key: #{key}, name: #{name}, suspended: #{suspended}"
-  end
 end
 
-class ProcessInstance
+class ProcessInstance < Resource
   include Connection
 
   attr_reader :id, :definition_id, :business_key, :case_instance_id, :ended, :suspended
 
-  def initialize(id:, definition_id:, business_key:, case_instance_id:, ended:, suspended:)
-    @id = id
-    @definition_id = definition_id
-    @business_key = business_key
-    @case_instance_id = case_instance_id
-    @ended = ended
-    @suspended = suspended
-  end
-
   def delete
     connection.delete("process-instance/#{id}")
   end
-
-  def to_s
-    "ProcessInstance: id: #{id}, definition_id: #{definition_id}, business_key: #{business_key}, ended: #{ended},  suspended: #{suspended}"
-  end
 end
 
-class TaskDefinition
+class TaskDefinition < Resource
   include Connection
 end
 
-class Task
+class Task < Resource
   include Connection
 
   attr_reader :id, :name, :assignee, :created, :due, :follow_up,
@@ -184,39 +166,23 @@ class Task
               :process_instance_id, :case_execution_id, :case_definition_id,
               :case_instance_id, :task_definition_key
 
-  def initialize(id:, name:, assignee:, created:, due:,
-                 follow_up:, delegation_state:, description:,
-                 execution_id:, owner:, parent_task_id:,
-                 priority:, process_definition_id:,
-                 process_instance_id:, case_execution_id:,
-                 case_definition_id:, case_instance_id:,
-                 task_definition_key:)
-    @id = id
-    @name = name
-    @assignee = assignee
-    @created = created
-    @due = due
-    @follow_up = follow_up
-    @delegation_state = delegation_state
-    @description = description
-    @execution_id = execution_id
-    @owner = owner
-    @parent_task_id = parent_task_id
-    @priority = priority
-    @process_definition_id = process_definition_id
-    @process_instance_id = process_instance_id
-    @case_execution_id = case_execution_id
-    @case_definition_id = case_definition_id
-    @case_instance_id = case_instance_id
-    @task_definition_key = task_definition_key
-  end
-
   def claim(user)
     connection.post("task/#{id}/claim", userId: user['id'])
   end
+end
 
-  def to_s
-    "Task: id: #{id}, name: #{name}, assignee: #{assignee}, created: #{created},  due: #{due}, owner: #{owner}, definition: #{task_definition_key}"
+class Filter < Resource
+  include Connection
+
+  attr_reader :id, :resource_type, :name, :owner, :query, :properties, :item_count
+
+  def create
+    result = connection.post('filter/create', id: id, resourceType: resource_type, name: name, owner: owner, query: query, properties: properties, itemCount: item_count) 
+    self
+  end
+
+  def delete
+    connection.delete("filter/#{id}")
   end
 end
 
@@ -225,79 +191,37 @@ class Camunda
 
   def groups
     connection.get('group').body.map do |group|
-      Group.new(id: group['id'],
-                name: group['name'],
-                type: group['type'])
+      Group.new.parse_body(group)
     end
   end
 
   def users
     connection.get('user').body.map do |user|
-      User.new(id: user['id'],
-               first_name: user['firstName'],
-               last_name: user['lastName'],
-               email: user['email'])
+      User.new.parse_body(user)
     end
   end
 
   def deployments
-    connection.get('deployment').body.map do |deployment|
-      Deployment.new(id: deployment['id'], name: deployment['name'])
-    end
+    connection.get('deployment').body.map { |deployment| Deployment.new.parse_body(deployment) }
   end
 
   def executions
-    connection.get('execution').body.map do |execution|
-      Execution.new(id: execution['id'], process_instance_id: execution['processInstanceId'], ended: execution['ended'])
-    end
+    connection.get('execution').body.map { |execution| Execution.new.parse_body(execution) }
   end
 
   def process_definitions
-    connection.get('process-definition').body.map do |definition|
-      ProcessDefinition.new(id: definition['id'],
-                            key: definition['key'],
-                            category: definition['category'],
-                            description: definition['description'],
-                            name: definition['name'],
-                            version: definition['version'],
-                            resource: definition['resource'],
-                            deployment_id: definition['deployment_id'],
-                            diagram: definition['diagram'],
-                            suspended: definition['suspended'])
-    end
+    connection.get('process-definition').body.map { |definition| ProcessDefinition.new.parse_body(definition) }
   end
 
   def process_instances
-    connection.get('process-instance').body.map do |instance|
-      ProcessInstance.new(id: instance['id'],
-                          definition_id: instance['definitionId'],
-                          business_key: instance['businessKey'],
-                          case_instance_id: instance['caseInstanceId'],
-                          ended: instance['ended'],
-                          suspended: instance['suspended'])
-    end
+    connection.get('process-instance').body.map { |instance| ProcessInstance.new.parse_body(instance) }
   end
 
   def tasks
-    connection.get('task').body.map do |task|
-      Task.new(id: task['id'],
-               name: task['name'],
-               assignee: task['assignee'],
-               created: task['created'],
-               due: task['due'],
-               follow_up: task['followUp'],
-               delegation_state: task['delegationState'],
-               description: task['description'],
-               execution_id: task['executionId'],
-               owner: task['owner'],
-               parent_task_id: task['parentTaskId'],
-               priority: task['priority'],
-               process_definition_id: task['processDefinitionId'],
-               process_instance_id: task['processInstanceid'],
-               case_execution_id: task['caseExecutionId'],
-               case_definition_id: task['caseDefinitionId'],
-               case_instance_id: task['caseInstanceid'],
-               task_definition_key: task['taskDefinitionKey'])
-    end
+    connection.get('task').body.map { |task| Task.new.parse_body(task) }
+  end
+
+  def filters
+    connection.get('filter').body.map { |filter| Filter.new.parse_body(filter) }
   end
 end
